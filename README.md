@@ -1,4 +1,4 @@
-my *simple* terminal. 
+**my *Simple* terminal.**
 
 sudo dnf install vte3-devel gtk3-devel
 
@@ -10,7 +10,7 @@ make
 
 sudo make install
 
-Configure font and colors:
+**Configure font and colors:**
 
 .Xresources
 
