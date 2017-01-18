@@ -55,11 +55,13 @@ gboolean window_delete_event_callback(GtkWidget *widget, GdkEvent *event, GPid *
 }
 
 const char * db_read_str_value(XrmDatabase *db, const char *name, const char *default_value ) {
-	XrmValue value;
-	char *type = NULL;
-	if (XrmGetResource(*db, name, (char *) NULL, &type, &value)) {
-		if (strcmp("String", type) == 0) {
-			return value.addr;
+	if (db != NULL) {
+		XrmValue value;
+		char *type = NULL;
+		if (XrmGetResource(*db, name, (char *) NULL, &type, &value)) {
+			if (strcmp("String", type) == 0) {
+				return value.addr;
+			}
 		}
 	}
 	return default_value;
@@ -68,78 +70,8 @@ const char * db_read_str_value(XrmDatabase *db, const char *name, const char *de
 int main (int argc, char *argv[]) {
 	
 	gtk_init(&argc, &argv);
-	
-	Display *dpy = XOpenDisplay(NULL);
-	if (!dpy) {
-		g_printerr("XOpenDisplay failed");
-		exit(EXIT_FAILURE);
-	}
-
 	XrmInitialize();
-
-	char *resource_manager = XResourceManagerString(dpy);
-	if (!resource_manager) {
-		g_printerr("XResourceManagerString failed");
-		exit(EXIT_FAILURE);
-	}
-
-	XrmDatabase db = XrmGetStringDatabase(resource_manager);
-	if (!db) {
-		g_printerr("XrmGetStringDatabase failed");
-		exit(EXIT_FAILURE);
-	}
-
-	g_printerr("database: %s", resource_manager);
-	
-	XrmValue value;
-	char *type = NULL;
-	if (XrmGetResource(db, "Termlex.collllor0", (char *) NULL, &type, &value)) {
-		g_printerr("value type: %s", type);
-		g_printerr("value: '%s'", value.addr);
-	} 
-	else {
-		g_printerr("Nothing returned");
-	}
-	
-	GdkRGBA foreground;
-	GdkRGBA background;
-	GdkRGBA cursorcolor;
-	GdkRGBA palette[16];
-
-	if (gdk_rgba_parse(&foreground, db_read_str_value(&db, "Termlex.foreground", "#dcdccc"))) {
-		g_printerr("color: %s\n", db_read_str_value(&db, "Termlex.foreground", "#dcdccc"));
-		g_printerr("color r:%f/g:%f/b:%f/a:%f \n", foreground.red, foreground.green, foreground.blue, foreground.alpha);
-	}
-	else {
-		g_printerr("color parce failure");
-	}
-
-	gdk_rgba_parse(&background, db_read_str_value(&db, "Termlex.background", "#1f1f1f"));
-	gdk_rgba_parse(&cursorcolor, db_read_str_value(&db, "Termlex.cursorcolor", "#8faf9f"));
-
-	gdk_rgba_parse(&palette[0], db_read_str_value(&db, "Termlex.color0", "#000d18"));
-	gdk_rgba_parse(&palette[8], db_read_str_value(&db, "Termlex.color8", "#000d18"));
-
-	gdk_rgba_parse(&palette[1], db_read_str_value(&db, "Termlex.color1", "#e89393"));
-	gdk_rgba_parse(&palette[9], db_read_str_value(&db, "Termlex.color9", "#e89393"));
-
-	gdk_rgba_parse(&palette[2], db_read_str_value(&db, "Termlex.color2", "#9ece9e"));
-	gdk_rgba_parse(&palette[10], db_read_str_value(&db, "Termlex.color10", "#9ece9e"));
-
-	gdk_rgba_parse(&palette[3], db_read_str_value(&db, "Termlex.color3", "#f0dfaf"));
-	gdk_rgba_parse(&palette[11], db_read_str_value(&db, "Termlex.color11", "#f0dfaf"));
-
-	gdk_rgba_parse(&palette[4], db_read_str_value(&db, "Termlex.color4", "#8cd0d3"));
-	gdk_rgba_parse(&palette[12], db_read_str_value(&db, "Termlex.color12", "#8cd0d3"));
-
-	gdk_rgba_parse(&palette[5], db_read_str_value(&db, "Termlex.color5", "#c0bed1"));
-	gdk_rgba_parse(&palette[13], db_read_str_value(&db, "Termlex.color13", "#c0bed1"));
-
-	gdk_rgba_parse(&palette[6], db_read_str_value(&db, "Termlex.color6", "#dfaf8f"));
-	gdk_rgba_parse(&palette[14], db_read_str_value(&db, "Termlex.color14", "#dfaf8f"));
-	
-	gdk_rgba_parse(&palette[7], db_read_str_value(&db, "Termlex.color7", "#efefef"));
-	gdk_rgba_parse(&palette[15], db_read_str_value(&db, "Termlex.color15", "#efefef"));
+	Display *display = XOpenDisplay(NULL);
 
 	gchar *command = NULL;
 	const GOptionEntry entries[] = {
@@ -180,25 +112,71 @@ int main (int argc, char *argv[]) {
 		exit(EXIT_FAILURE);
 	}
 
-	VteTerminal *vte = NULL;
+	XrmDatabase db = NULL;
+	if (display) {
+		char *resource_manager = XResourceManagerString(display);
+		if (resource_manager) {
+			g_printerr("database: %s", resource_manager);
+			db = XrmGetStringDatabase(resource_manager);
+		}
+	}
+
+	VteTerminal *vte =  (VteTerminal *) vte_terminal_new();
 	GtkScrollbar* scrollbar = NULL;
 	GtkBox *box = NULL;
 	GtkWindow *window = NULL;
-
 	GPid child_pid = 0;
 
-	vte = (VteTerminal *) vte_terminal_new();
 	vte_terminal_set_scrollback_lines(vte, -1); //infinite scrollback
 	vte_terminal_set_rewrap_on_resize(vte, TRUE);
 	//vte_terminal_set_word_chars(vte, "-A-Za-z0-9,./?%&#:_=+ ~");
 	vte_terminal_set_word_chars(vte, "-A-Za-z0-9,./?%&#:_=+~");
 	vte_terminal_set_font_from_string (vte, "PT Mono 12");
+
+	/* Set colors */
+	GdkRGBA foreground;
+	GdkRGBA background;
+	GdkRGBA cursorcolor;
+	GdkRGBA palette[16];
+
+	gdk_rgba_parse(&foreground, db_read_str_value(&db, "Termlex.foreground", "#dcdccc"));
+	gdk_rgba_parse(&background, db_read_str_value(&db, "Termlex.background", "#1f1f1f"));
+	gdk_rgba_parse(&cursorcolor, db_read_str_value(&db, "Termlex.cursorcolor", "#8faf9f"));
+
+	gdk_rgba_parse(&palette[0], db_read_str_value(&db, "Termlex.color0", "#000d18"));
+	gdk_rgba_parse(&palette[8], db_read_str_value(&db, "Termlex.color8", "#000d18"));
+
+	gdk_rgba_parse(&palette[1], db_read_str_value(&db, "Termlex.color1", "#e89393"));
+	gdk_rgba_parse(&palette[9], db_read_str_value(&db, "Termlex.color9", "#e89393"));
+
+	gdk_rgba_parse(&palette[2], db_read_str_value(&db, "Termlex.color2", "#9ece9e"));
+	gdk_rgba_parse(&palette[10], db_read_str_value(&db, "Termlex.color10", "#9ece9e"));
+
+	gdk_rgba_parse(&palette[3], db_read_str_value(&db, "Termlex.color3", "#f0dfaf"));
+	gdk_rgba_parse(&palette[11], db_read_str_value(&db, "Termlex.color11", "#f0dfaf"));
+
+	gdk_rgba_parse(&palette[4], db_read_str_value(&db, "Termlex.color4", "#8cd0d3"));
+	gdk_rgba_parse(&palette[12], db_read_str_value(&db, "Termlex.color12", "#8cd0d3"));
+
+	gdk_rgba_parse(&palette[5], db_read_str_value(&db, "Termlex.color5", "#c0bed1"));
+	gdk_rgba_parse(&palette[13], db_read_str_value(&db, "Termlex.color13", "#c0bed1"));
+
+	gdk_rgba_parse(&palette[6], db_read_str_value(&db, "Termlex.color6", "#dfaf8f"));
+	gdk_rgba_parse(&palette[14], db_read_str_value(&db, "Termlex.color14", "#dfaf8f"));
+	
+	gdk_rgba_parse(&palette[7], db_read_str_value(&db, "Termlex.color7", "#efefef"));
+	gdk_rgba_parse(&palette[15], db_read_str_value(&db, "Termlex.color15", "#efefef"));
+
 	vte_terminal_set_colors_rgba(vte, &foreground, &background, palette, 16);
+
+	/* */
+
 	g_signal_connect(vte, "child-exited", G_CALLBACK(vte_child_exited_callback), &child_pid);
 	g_signal_connect(vte, "beep", G_CALLBACK(vte_beep_callback), &window);
 	g_signal_connect(vte, "focus-in-event", G_CALLBACK (vte_focus_in_event_callback), &window);
 	g_signal_connect(vte, "key-press-event", G_CALLBACK (vte_key_press_callback), NULL);
 
+	XrmDestroyDatabase(db);
 
 	vte_terminal_fork_command_full(
 		(VteTerminal *) vte,
@@ -235,7 +213,9 @@ int main (int argc, char *argv[]) {
 	gtk_widget_show_all((GtkWidget *) window);
 	gtk_main();
 
-	g_free(command);
+	if (display) {
+		XCloseDisplay(display);
+	}
 
 	return EXIT_SUCCESS;
 }
