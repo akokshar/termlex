@@ -12,8 +12,9 @@ sudo make install
 
 **Configure font and colors:**
 
-.Xresources
+`vi ~/.Xresources`
 
+```
 Termlex*font: PT Mono 12
 ! special
 *.foreground:   #f1ebeb
@@ -51,4 +52,5 @@ Termlex*font: PT Mono 12
 ! white
 *.color7:       #acada1
 *.color15:      #cfd0c2
+```
 
