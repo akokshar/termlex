@@ -63,7 +63,12 @@ const char * db_read_str_value(XrmDatabase *db, const char *name, const char *de
 				return value.addr;
 			}
 		}
+		//else {
+		//	g_printerr("Cannot load resource: %s\n", name);
+		//}
 	}
+
+	//g_printerr("Using default %s : %s\n", name, default_value);
 	return default_value;
 }
 
@@ -116,7 +121,7 @@ int main (int argc, char *argv[]) {
 	if (display) {
 		char *resource_manager = XResourceManagerString(display);
 		if (resource_manager) {
-			g_printerr("database: %s", resource_manager);
+			//g_printerr("database: %s", resource_manager);
 			db = XrmGetStringDatabase(resource_manager);
 		}
 	}
@@ -131,7 +136,7 @@ int main (int argc, char *argv[]) {
 	vte_terminal_set_rewrap_on_resize(vte, TRUE);
 	//vte_terminal_set_word_chars(vte, "-A-Za-z0-9,./?%&#:_=+ ~");
 	vte_terminal_set_word_chars(vte, "-A-Za-z0-9,./?%&#:_=+~");
-	vte_terminal_set_font_from_string (vte, "PT Mono 12");
+	vte_terminal_set_font_from_string(vte, db_read_str_value(&db, "Termlex.font", "PT Mono 12"));
 
 	/* Set colors */
 	GdkRGBA foreground;
