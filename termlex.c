@@ -134,6 +134,8 @@ int main (int argc, char *argv[]) {
 
 	vte_terminal_set_scrollback_lines(vte, -1); //infinite scrollback
 	vte_terminal_set_rewrap_on_resize(vte, TRUE);
+	vte_terminal_set_scroll_on_keystroke(vte, TRUE);
+	vte_terminal_set_allow_bold (vte, TRUE);
 	//vte_terminal_set_word_chars(vte, "-A-Za-z0-9,./?%&#:_=+ ~");
 	vte_terminal_set_word_chars(vte, "-A-Za-z0-9,./?%&#:_=+~");
 	vte_terminal_set_font_from_string(vte, db_read_str_value(&db, "Termlex.font", "PT Mono 12"));
