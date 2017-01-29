@@ -7,25 +7,32 @@
 
 #include <vte/vte.h>
 
-void vte_child_exited_callback(VteTerminal *vte, GPid *child_pid) {
-	//GPid pid = *child_pid;
-	//int vte_terminal_get_child_exit_status(VteTerminal *terminal);
-	gtk_main_quit();
-}
+#define MODE_TERM 0
+#define MODE_SEARCH 1
 
-void vte_beep_callback(VteTerminal *vte, GtkWindow **window) {
-	if (!gtk_window_is_active(*window)) {
-		gtk_window_set_urgency_hint(*window, TRUE);
+typedef struct termlex {
+	VteTerminal *vte;
+	GtkScrollbar* scrollbar;
+	GtkBox *box;
+	GtkBox *box_vte;
+	GtkBox *box_search;
+	GtkWindow *window;
+	GPid child_pid;
+} Termlex;
+
+void vte_beep_callback(VteTerminal *vte, Termlex *termlex) {
+	if (!gtk_window_is_active(termlex->window)) {
+		gtk_window_set_urgency_hint(termlex->window, TRUE);
 	}
 }
 
-void vte_focus_in_event_callback(GtkWidget *widget, GdkEvent *event, GtkWindow **window) {
-	if (gtk_window_get_urgency_hint(*window)) {
-		gtk_window_set_urgency_hint(*window, FALSE);
+void vte_focus_in_event_callback(GtkWidget *widget, GdkEvent *event, Termlex *termlex) {
+	if (gtk_window_get_urgency_hint(termlex->window)) {
+		gtk_window_set_urgency_hint(termlex->window, FALSE);
 	}
 }
 
-gboolean vte_key_press_callback(GtkWidget *widget, GdkEventKey *event, gpointer user_data) {
+gboolean vte_key_press_callback(GtkWidget *widget, GdkEventKey *event, Termlex *termlex) {
 	if ((event->state & (GDK_CONTROL_MASK | GDK_SHIFT_MASK)) == (GDK_CONTROL_MASK | GDK_SHIFT_MASK) ) {
 		//g_printerr("Ctrl+Shift detected");
 		switch (gdk_keyval_to_upper(event->keyval)) {
@@ -35,22 +42,25 @@ gboolean vte_key_press_callback(GtkWidget *widget, GdkEventKey *event, gpointer 
 			case GDK_KEY_V:
 				vte_terminal_paste_clipboard((VteTerminal *) widget);
 				return TRUE;
+		//	case GDK_KEY_F:
+		//		
+		//		return TRUE;
 		}
 	}
 
 	return FALSE;	
 }
 
-gboolean window_delete_event_callback(GtkWidget *widget, GdkEvent *event, GPid *child_pid) {
-	GPid pid = *child_pid;
+void vte_child_exited_callback(VteTerminal *vte, Termlex *termlex) {
+	gtk_main_quit();
+}
 
-	if (pid != 0) {
-		kill(pid, SIGTERM);
+gboolean window_delete_event_callback(GtkWidget *widget, GdkEvent *event, Termlex *termlex) {
+	if (termlex->child_pid != 0) {
+		kill(termlex->child_pid, SIGTERM);
 		return TRUE;
 	}
-
 	gtk_main_quit();
-
 	return FALSE;
 }
 
@@ -126,19 +136,21 @@ int main (int argc, char *argv[]) {
 		}
 	}
 
-	VteTerminal *vte =  (VteTerminal *) vte_terminal_new();
-	GtkScrollbar* scrollbar = NULL;
-	GtkBox *box = NULL;
-	GtkWindow *window = NULL;
-	GPid child_pid = 0;
+	Termlex termlex;
+	termlex.vte =  (VteTerminal *) vte_terminal_new();
+	termlex.scrollbar = NULL;
+	termlex.box_vte = NULL;
+	termlex.window = NULL;
+	termlex.child_pid = 0;
+	int mode = MODE_TERM;
 
-	vte_terminal_set_scrollback_lines(vte, -1); //infinite scrollback
-	vte_terminal_set_rewrap_on_resize(vte, TRUE);
-	vte_terminal_set_scroll_on_keystroke(vte, TRUE);
-	vte_terminal_set_allow_bold (vte, TRUE);
-	//vte_terminal_set_word_chars(vte, "-A-Za-z0-9,./?%&#:_=+ ~");
-	vte_terminal_set_word_chars(vte, "-A-Za-z0-9,./?%&#:_=+~");
-	vte_terminal_set_font_from_string(vte, db_read_str_value(&db, "Termlex.font", "PT Mono 12"));
+	vte_terminal_set_scrollback_lines(termlex.vte, -1); //infinite scrollback
+	vte_terminal_set_rewrap_on_resize(termlex.vte, TRUE);
+	vte_terminal_set_scroll_on_keystroke(termlex.vte, TRUE);
+	vte_terminal_set_allow_bold (termlex.vte, TRUE);
+	//vte_terminal_set_word_chars(termlex.vte, "-A-Za-z0-9,./?%&#:_=+ ~");
+	vte_terminal_set_word_chars(termlex.vte, "-A-Za-z0-9,./?%&#:_=+~");
+	vte_terminal_set_font_from_string(termlex.vte, db_read_str_value(&db, "Termlex.font", "PT Mono 12"));
 
 	/* Set colors */
 	GdkRGBA foreground;
@@ -174,19 +186,19 @@ int main (int argc, char *argv[]) {
 	gdk_rgba_parse(&palette[7], db_read_str_value(&db, "Termlex.color7", "#efefef"));
 	gdk_rgba_parse(&palette[15], db_read_str_value(&db, "Termlex.color15", "#efefef"));
 
-	vte_terminal_set_colors_rgba(vte, &foreground, &background, palette, 16);
+	vte_terminal_set_colors_rgba(termlex.vte, &foreground, &background, palette, 16);
 
 	/* */
 
-	g_signal_connect(vte, "child-exited", G_CALLBACK(vte_child_exited_callback), &child_pid);
-	g_signal_connect(vte, "beep", G_CALLBACK(vte_beep_callback), &window);
-	g_signal_connect(vte, "focus-in-event", G_CALLBACK (vte_focus_in_event_callback), &window);
-	g_signal_connect(vte, "key-press-event", G_CALLBACK (vte_key_press_callback), NULL);
+	g_signal_connect(termlex.vte, "child-exited", G_CALLBACK(vte_child_exited_callback), &termlex);
+	g_signal_connect(termlex.vte, "beep", G_CALLBACK(vte_beep_callback), &termlex);
+	g_signal_connect(termlex.vte, "focus-in-event", G_CALLBACK (vte_focus_in_event_callback), &termlex);
+	g_signal_connect(termlex.vte, "key-press-event", G_CALLBACK (vte_key_press_callback), &termlex);
 
 	XrmDestroyDatabase(db);
 
 	vte_terminal_fork_command_full(
-		(VteTerminal *) vte,
+		(VteTerminal *) termlex.vte,
 		(VTE_PTY_NO_HELPER),
 		NULL,
 		command_argv,
@@ -194,7 +206,7 @@ int main (int argc, char *argv[]) {
 		(G_SPAWN_DO_NOT_REAP_CHILD | G_SPAWN_SEARCH_PATH | G_SPAWN_LEAVE_DESCRIPTORS_OPEN),
 		NULL,
 		NULL,
-		&child_pid,
+		&termlex.child_pid,
 		&error);
 
 	g_strfreev(command_argv);
@@ -205,19 +217,19 @@ int main (int argc, char *argv[]) {
 		exit(EXIT_FAILURE);
 	}
 
-	//scrollbar = gtk_scrollbar_new(GTK_ORIENTATION_VERTICAL, vte_terminal_get_adjustment(vte));
+	//termlex.scrollbar = gtk_scrollbar_new(GTK_ORIENTATION_VERTICAL, vte_terminal_get_adjustment(termlex.vte));
 
-	box = (GtkBox *) gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-	gtk_box_pack_start(box, (GtkWidget *) vte, TRUE, TRUE, 0);
-	//gtk_box_pack_start(box, (GtkWidget *) scrollbar, FALSE, FALSE, 0);
+	termlex.box_vte = (GtkBox *) gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+	gtk_box_pack_start(termlex.box_vte, (GtkWidget *) termlex.vte, TRUE, TRUE, 0);
+	//gtk_box_pack_start(termlex.box_vte, (GtkWidget *) termlex.scrollbar, FALSE, FALSE, 0);
 
-	window = (GtkWindow *) gtk_window_new(GTK_WINDOW_TOPLEVEL);
-	g_signal_connect(window, "delete-event", G_CALLBACK (window_delete_event_callback), &child_pid);
-	gtk_window_set_role(window, "Termlex");
-	gtk_window_set_title(window, "Termlex");
-	gtk_container_add((GtkContainer *) window, (GtkWidget *) box);
+	termlex.window = (GtkWindow *) gtk_window_new(GTK_WINDOW_TOPLEVEL);
+	g_signal_connect(termlex.window, "delete-event", G_CALLBACK (window_delete_event_callback), &termlex);
+	gtk_window_set_role(termlex.window, "Termlex");
+	gtk_window_set_title(termlex.window, "Termlex");
+	gtk_container_add((GtkContainer *) termlex.window, (GtkWidget *) termlex.box_vte);
 
-	gtk_widget_show_all((GtkWidget *) window);
+	gtk_widget_show_all((GtkWidget *) termlex.window);
 	gtk_main();
 
 	if (display) {
