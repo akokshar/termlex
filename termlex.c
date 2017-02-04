@@ -42,6 +42,11 @@ gboolean vte_key_press_callback(GtkWidget *widget, GdkEventKey *event, Termlex *
 			case GDK_KEY_V:
 				vte_terminal_paste_clipboard((VteTerminal *) widget);
 				return TRUE;
+			case GDK_KEY_D:
+				if (termlex->child_pid != 0) {
+					kill(termlex->child_pid, SIGKILL);
+				}
+				return TRUE;
 		//	case GDK_KEY_F:
 		//		
 		//		return TRUE;
