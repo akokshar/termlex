@@ -94,8 +94,10 @@ int main (int argc, char *argv[]) {
 	Display *display = XOpenDisplay(NULL);
 
 	gchar *command = NULL;
+	gchar *title = NULL;
 	const GOptionEntry entries[] = {
 		{"command", 'c', 0, G_OPTION_ARG_STRING, &command, "Command to execute. Defaults to user's shell", "COMMAND"},
+		{"title", 't', 0, G_OPTION_ARG_STRING, &title, "Window title. Defaults to 'Termlex'", "TITLE"},
 		{ NULL }
 	};
 	
@@ -114,7 +116,7 @@ int main (int argc, char *argv[]) {
 	}
 
 	if (!command) {
-		command = command = vte_get_user_shell();
+		command = vte_get_user_shell();
 	}
 
 	if (!command) {
@@ -228,10 +230,17 @@ int main (int argc, char *argv[]) {
 	gtk_box_pack_start(termlex.box_vte, (GtkWidget *) termlex.vte, TRUE, TRUE, 0);
 	//gtk_box_pack_start(termlex.box_vte, (GtkWidget *) termlex.scrollbar, FALSE, FALSE, 0);
 
+
 	termlex.window = (GtkWindow *) gtk_window_new(GTK_WINDOW_TOPLEVEL);
 	g_signal_connect(termlex.window, "delete-event", G_CALLBACK (window_delete_event_callback), &termlex);
 	gtk_window_set_role(termlex.window, "Termlex");
-	gtk_window_set_title(termlex.window, "Termlex");
+	
+	if (!title) {
+		title = g_strdup("Termlex");
+	}
+	gtk_window_set_title(termlex.window, title);
+	g_free(title);
+
 	gtk_container_add((GtkContainer *) termlex.window, (GtkWidget *) termlex.box_vte);
 
 	gtk_widget_show_all((GtkWidget *) termlex.window);
