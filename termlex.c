@@ -56,12 +56,22 @@ gboolean vte_key_press_callback(GtkWidget *widget, GdkEventKey *event, Termlex *
 	return FALSE;	
 }
 
+void vte_spawn_callback(VteTerminal *vte, GPid pid, GError *error, gpointer data) {
+	Termlex *termlex = (Termlex *) data;
+        if (pid == -1) {
+                g_printerr("Spawning failed: %s\n", error->message);
+                return;
+        }
+
+        g_printerr("Spawning succeded, PID %ld\n", (long)pid);
+}
+
 void vte_child_exited_callback(VteTerminal *vte, Termlex *termlex) {
 	gtk_main_quit();
 }
 
 gboolean window_delete_event_callback(GtkWidget *widget, GdkEvent *event, Termlex *termlex) {
-	if (termlex->child_pid != 0) {
+	if (termlex->child_pid > 0) {
 		kill(termlex->child_pid, SIGTERM);
 		return TRUE;
 	}
@@ -155,9 +165,12 @@ int main (int argc, char *argv[]) {
 	vte_terminal_set_rewrap_on_resize(termlex.vte, TRUE);
 	vte_terminal_set_scroll_on_keystroke(termlex.vte, TRUE);
 	vte_terminal_set_allow_bold (termlex.vte, TRUE);
-	//vte_terminal_set_word_chars(termlex.vte, "-A-Za-z0-9,./?%&#:_=+ ~");
-	vte_terminal_set_word_chars(termlex.vte, "-A-Za-z0-9,./?%&#:_=+~");
-	vte_terminal_set_font_from_string(termlex.vte, db_read_str_value(&db, "Termlex.font", "PT Mono 12"));
+	//vte_terminal_set_word_char_exceptions(termlex.vte, ",./?%&#=+\\");
+	vte_terminal_set_word_char_exceptions(termlex.vte, "-.:/?%&=+~");
+	 	
+	PangoFontDescription *font = pango_font_description_from_string(db_read_str_value(&db, "Termlex.font", "PT Mono 12"));
+	vte_terminal_set_font(termlex.vte, font);
+	pango_font_description_free(font);
 
 	/* Set colors */
 	GdkRGBA foreground;
@@ -193,7 +206,7 @@ int main (int argc, char *argv[]) {
 	gdk_rgba_parse(&palette[7], db_read_str_value(&db, "Termlex.color7", "#efefef"));
 	gdk_rgba_parse(&palette[15], db_read_str_value(&db, "Termlex.color15", "#efefef"));
 
-	vte_terminal_set_colors_rgba(termlex.vte, &foreground, &background, palette, 16);
+	vte_terminal_set_colors(termlex.vte, &foreground, &background, palette, 16);
 
 	/* */
 
@@ -204,18 +217,35 @@ int main (int argc, char *argv[]) {
 
 	XrmDestroyDatabase(db);
 
-	vte_terminal_fork_command_full(
+	vte_terminal_spawn_async(
 		(VteTerminal *) termlex.vte,
-		(VTE_PTY_NO_HELPER),
+		VTE_PTY_DEFAULT,
 		NULL,
 		command_argv,
 		NULL,
+//		G_SPAWN_SEARCH_PATH_FROM_ENVP,
 		(G_SPAWN_DO_NOT_REAP_CHILD | G_SPAWN_SEARCH_PATH | G_SPAWN_LEAVE_DESCRIPTORS_OPEN),
 		NULL,
 		NULL,
-		&termlex.child_pid,
-		&error);
-
+		NULL,
+		30 * 1000 ,
+		NULL,
+		&vte_spawn_callback,
+		&termlex);
+/*
+	vte_terminal_spawn_sync(
+			(VteTerminal *) termlex.vte, 
+			(VTE_PTY_NO_HELPER), 
+			NULL, // working dir. NULL - current
+			command_argv, 
+			NULL, // env vars 
+			(G_SPAWN_DO_NOT_REAP_CHILD | G_SPAWN_SEARCH_PATH | G_SPAWN_LEAVE_DESCRIPTORS_OPEN), 
+			NULL,// child setup 
+			NULL, // child data 
+			&termlex.child_pid, 
+			NULL, 
+			&error);
+*/
 	g_strfreev(command_argv);
 
 	if (error) {
@@ -224,12 +254,11 @@ int main (int argc, char *argv[]) {
 		exit(EXIT_FAILURE);
 	}
 
-	//termlex.scrollbar = gtk_scrollbar_new(GTK_ORIENTATION_VERTICAL, vte_terminal_get_adjustment(termlex.vte));
+//	termlex.scrollbar = gtk_scrollbar_new(GTK_ORIENTATION_VERTICAL, vte_terminal_get_adjustment(termlex.vte));
 
 	termlex.box_vte = (GtkBox *) gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
 	gtk_box_pack_start(termlex.box_vte, (GtkWidget *) termlex.vte, TRUE, TRUE, 0);
-	//gtk_box_pack_start(termlex.box_vte, (GtkWidget *) termlex.scrollbar, FALSE, FALSE, 0);
-
+//	gtk_box_pack_start(termlex.box_vte, (GtkWidget *) termlex.scrollbar, FALSE, FALSE, 0);
 
 	termlex.window = (GtkWindow *) gtk_window_new(GTK_WINDOW_TOPLEVEL);
 	g_signal_connect(termlex.window, "delete-event", G_CALLBACK (window_delete_event_callback), &termlex);
